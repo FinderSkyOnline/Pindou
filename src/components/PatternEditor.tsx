@@ -1,4 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
+import { Box, Paper, Button, Typography, Alert, Stack } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import type { BeadColor, CalibrationState, RecognizedPattern, PatternCell, ColorUsage } from '../types';
 import { getImageScale, sampleCellColor, computeFullGrid } from '../utils/imageUtils';
 import { buildMatcher } from '../utils/colorMatcher';
@@ -21,14 +24,11 @@ export default function PatternEditor({ imageUrl, beadColors, onPatternRecognize
   const [running, setRunning] = useState(false);
   const [warning, setWarning] = useState('');
 
-  // Measure container size and set initial grid position
   useEffect(() => {
     function measure() {
       const el = containerRef.current;
       if (!el) return;
-      const w = el.offsetWidth;
-      const h = el.offsetHeight;
-      setContainerSize({ w, h });
+      setContainerSize({ w: el.offsetWidth, h: el.offsetHeight });
     }
     measure();
     window.addEventListener('resize', measure);
@@ -41,14 +41,11 @@ export default function PatternEditor({ imageUrl, beadColors, onPatternRecognize
     const w = el.offsetWidth;
     const h = el.offsetHeight;
     setContainerSize({ w, h });
-    // Place grid in image center
-    const cw = INITIAL_CELL;
-    const ch = INITIAL_CELL;
     setCalibration({
-      x: Math.round(w / 2 - cw * 1.5),
-      y: Math.round(h / 2 - ch * 1.5),
-      cellW: cw,
-      cellH: ch,
+      x: Math.round(w / 2 - INITIAL_CELL * 1.5),
+      y: Math.round(h / 2 - INITIAL_CELL * 1.5),
+      cellW: INITIAL_CELL,
+      cellH: INITIAL_CELL,
     });
   }
 
@@ -58,13 +55,10 @@ export default function PatternEditor({ imageUrl, beadColors, onPatternRecognize
     setRunning(true);
     setWarning('');
 
-    // Use fresh scale at confirmation time
     const scale = getImageScale(img);
     const { cols, rows, cells } = computeFullGrid(calibration, scale);
 
-    if (cols * rows > 250000) {
-      setWarning(`网格过大（${cols}×${rows}），已自动限制为 500×500`);
-    }
+    if (cols * rows > 250000) setWarning(`网格过大（${cols}×${rows}），已自动限制为 500×500`);
 
     const canvas = document.createElement('canvas');
     canvas.width = scale.naturalWidth;
@@ -80,7 +74,6 @@ export default function PatternEditor({ imageUrl, beadColors, onPatternRecognize
       const { r, g, b } = sampleCellColor(ctx, cell.natX, cell.natY, cell.natW, cell.natH);
       const matched = findNearest(r, g, b);
       grid[cell.row][cell.col] = { col: cell.col, row: cell.row, color: matched };
-
       const prev = usageMap.get(matched.code);
       if (prev) prev.count++;
       else usageMap.set(matched.code, { color: matched, count: 1 });
@@ -92,15 +85,38 @@ export default function PatternEditor({ imageUrl, beadColors, onPatternRecognize
   }
 
   return (
-    <div className="editor">
-      <div className="editor__canvas-wrap" ref={containerRef}>
+    <Stack spacing={2}>
+      {/* image + grid overlay */}
+      <Box
+        ref={containerRef}
+        sx={{
+          position: 'relative',
+          display: 'inline-block',
+          lineHeight: 0,
+          alignSelf: 'flex-start',
+          borderRadius: 3,
+          overflow: 'visible',
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          maxHeight: '65vh',
+          touchAction: 'none', // prevent page zoom over image area
+        }}
+      >
         <img
           ref={imgRef}
           src={imageUrl}
           alt="bead pattern"
-          className="editor__img"
           onLoad={onImageLoad}
           draggable={false}
+          style={{
+            display: 'block',
+            maxWidth: '100%',
+            maxHeight: '65vh',
+            objectFit: 'contain',
+            borderRadius: 12,
+            userSelect: 'none',
+          }}
         />
         {containerSize.w > 0 && (
           <CalibrationGrid
@@ -110,20 +126,30 @@ export default function PatternEditor({ imageUrl, beadColors, onPatternRecognize
             containerH={containerSize.h}
           />
         )}
-      </div>
+      </Box>
 
-      <div className="editor__toolbar">
-        <div className="editor__hint">
-          <strong>校准方法：</strong>拖动网格到图纸上，调整四角手柄使 3×3 格子恰好覆盖 3×3 颗豆子
-        </div>
-        {warning && <div className="editor__warning">{warning}</div>}
-        <div className="editor__actions">
-          <button className="btn btn--secondary" onClick={onReset}>换图片</button>
-          <button className="btn btn--primary" onClick={handleRecognize} disabled={running}>
+      {/* toolbar */}
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, lineHeight: 1.7 }}>
+          <strong style={{ color: '#fff' }}>校准方法：</strong>
+          拖动网格到图纸上，拖四角调整大小，使 3×3 格子恰好覆盖 3×3 颗豆子
+        </Typography>
+        {warning && <Alert severity="warning" sx={{ mb: 1.5, borderRadius: 2 }}>{warning}</Alert>}
+        <Stack direction="row" spacing={1.5}>
+          <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={onReset} size="small">
+            换图片
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<SearchIcon />}
+            onClick={handleRecognize}
+            disabled={running}
+            size="small"
+          >
             {running ? '识别中…' : '确认校准并识别'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Stack>
+      </Paper>
+    </Stack>
   );
 }

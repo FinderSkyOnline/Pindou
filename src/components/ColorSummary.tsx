@@ -1,3 +1,4 @@
+import { Box, Paper, Typography, Chip, LinearProgress, Stack } from '@mui/material';
 import type { ColorUsage } from '../types';
 
 interface Props {
@@ -8,20 +9,29 @@ export default function ColorSummary({ summary }: Props) {
   const total = summary.reduce((s, c) => s + c.count, 0);
 
   return (
-    <div className="summary">
-      <h2 className="section-title">用色统计 <span className="dim">共 {summary.length} 种 · {total} 颗</span></h2>
-      <div className="summary__list">
+    <Paper sx={{ p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>用色统计</Typography>
+        <Chip label={`${summary.length} 种 · ${total} 颗`} size="small" variant="outlined" />
+      </Box>
+      <Stack spacing={1} sx={{ maxHeight: 400, overflowY: 'auto' }}>
         {summary.map(({ color, count }) => (
-          <div key={color.code} className="summary__row">
-            <span className="summary__swatch" style={{ backgroundColor: color.hex }} />
-            <span className="summary__code">{color.code}</span>
-            <span className="summary__count">{count} 颗</span>
-            <div className="summary__bar-wrap">
-              <div className="summary__bar" style={{ width: `${(count / total) * 100}%` }} />
-            </div>
-          </div>
+          <Box key={color.code} sx={{ display: 'grid', gridTemplateColumns: '20px 80px 64px 1fr', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ width: 16, height: 16, borderRadius: '4px', bgcolor: color.hex, border: '1px solid rgba(255,255,255,0.12)', flexShrink: 0 }} />
+            <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.primary' }}>
+              {color.code}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right' }}>
+              {count} 颗
+            </Typography>
+            <LinearProgress
+              variant="determinate"
+              value={(count / total) * 100}
+              sx={{ height: 6, '& .MuiLinearProgress-bar': { bgcolor: color.hex } }}
+            />
+          </Box>
         ))}
-      </div>
-    </div>
+      </Stack>
+    </Paper>
   );
 }

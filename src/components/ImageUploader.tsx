@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { Paper, Typography } from '@mui/material';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 interface Props {
   onImageLoaded: (objectUrl: string) => void;
@@ -25,20 +27,34 @@ export default function ImageUploader({ onImageLoaded }: Props) {
   }
 
   return (
-    <div
-      className={`uploader ${dragging ? 'uploader--drag' : ''}`}
+    <Paper
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
+      sx={{
+        width: '100%',
+        maxWidth: 440,
+        p: 5,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 1.5,
+        cursor: 'pointer',
+        border: '2px dashed',
+        borderColor: dragging ? 'primary.main' : 'divider',
+        bgcolor: dragging ? 'rgba(79,195,247,0.06)' : 'background.paper',
+        transition: 'border-color 0.2s, background-color 0.2s',
+        '&:hover': { borderColor: 'primary.main', bgcolor: 'rgba(79,195,247,0.06)' },
+      }}
     >
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="17 8 12 3 7 8"/>
-        <line x1="12" y1="3" x2="12" y2="15"/>
-      </svg>
-      <p>点击或拖拽图片到此处</p>
-      <p className="uploader__hint">支持 JPG、PNG、WebP 等常见格式</p>
+      <UploadFileIcon sx={{ fontSize: 40, color: dragging ? 'primary.main' : 'text.secondary' }} />
+      <Typography variant="body1" color={dragging ? 'primary.main' : 'text.primary'}>
+        点击或拖拽图片到此处
+      </Typography>
+      <Typography variant="caption" color="text.secondary">
+        支持 JPG、PNG、WebP 等常见格式
+      </Typography>
       <input
         ref={inputRef}
         type="file"
@@ -46,6 +62,6 @@ export default function ImageUploader({ onImageLoaded }: Props) {
         style={{ display: 'none' }}
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
       />
-    </div>
+    </Paper>
   );
 }

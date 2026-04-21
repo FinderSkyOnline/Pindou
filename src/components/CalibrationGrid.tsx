@@ -1,8 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useState, useLayoutEffect } from 'react';
 import type { CalibrationState } from '../types';
 
-const MIN_CELL = 8;
-const HANDLE_R = 7;
+const MIN_CELL = 3;
+const HANDLE_R = 8;
 
 interface Props {
   calibration: CalibrationState;
@@ -17,31 +17,43 @@ type DragMode =
   | { type: 'resize'; corner: 'NW' | 'NE' | 'SW' | 'SE'; sx: number; sy: number; snap: CalibrationState };
 
 export default function CalibrationGrid({ calibration, onChange, containerW, containerH }: Props) {
+  // Local state drives SVG rendering — no React re-render overhead during drag
+  const [local, setLocal] = useState<CalibrationState>(calibration);
   const modeRef = useRef<DragMode>({ type: 'none' });
-  const { x, y, cellW, cellH } = calibration;
-  const gridW = cellW * 3;
-  const gridH = cellH * 3;
+  const localRef = useRef<CalibrationState>(calibration);
 
-  function clamp(cal: CalibrationState): CalibrationState {
-    return {
-      ...cal,
-      cellW: Math.max(MIN_CELL, cal.cellW),
-      cellH: Math.max(MIN_CELL, cal.cellH),
-      x: Math.max(-gridW + 20, Math.min(containerW - 20, cal.x)),
-      y: Math.max(-gridH + 20, Math.min(containerH - 20, cal.y)),
+  // Sync external calibration changes (e.g. reset) into local state
+  useLayoutEffect(() => {
+    localRef.current = calibration;
+    setLocal(calibration);
+  }, [calibration]);
+
+  function update(next: CalibrationState) {
+    const clamped: CalibrationState = {
+      cellW: Math.max(MIN_CELL, next.cellW),
+      cellH: Math.max(MIN_CELL, next.cellH),
+      x: Math.max(-next.cellW * 3 + 20, Math.min(containerW - 20, next.x)),
+      y: Math.max(-next.cellH * 3 + 20, Math.min(containerH - 20, next.y)),
     };
+    localRef.current = clamped;
+    setLocal(clamped);
+  }
+
+  function commit() {
+    onChange(localRef.current);
   }
 
   function onPointerMove(e: React.PointerEvent<SVGSVGElement>) {
     const m = modeRef.current;
     if (m.type === 'none') return;
+    e.preventDefault();
 
     if (m.type === 'move') {
-      onChange(clamp({
-        ...calibration,
+      update({
+        ...localRef.current,
         x: m.ox + e.clientX - m.sx,
         y: m.oy + e.clientY - m.sy,
-      }));
+      });
     } else {
       const dx = e.clientX - m.sx;
       const dy = e.clientY - m.sy;
@@ -61,86 +73,83 @@ export default function CalibrationGrid({ calibration, onChange, containerW, con
         ncH = Math.max(MIN_CELL, (s.cellH * 3 - dy) / 3);
         ny = s.y + s.cellH * 3 - ncH * 3;
       } else {
-        // SW
         ncW = Math.max(MIN_CELL, (s.cellW * 3 - dx) / 3);
         ncH = Math.max(MIN_CELL, (s.cellH * 3 + dy) / 3);
         nx = s.x + s.cellW * 3 - ncW * 3;
       }
-      onChange(clamp({ x: nx, y: ny, cellW: ncW, cellH: ncH }));
+      update({ x: nx, y: ny, cellW: ncW, cellH: ncH });
     }
   }
 
   function onPointerUp(e: React.PointerEvent<SVGSVGElement>) {
     (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId);
     modeRef.current = { type: 'none' };
+    commit(); // sync to parent only on release — prevents damping
   }
 
   function startMove(e: React.PointerEvent) {
     e.stopPropagation();
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    modeRef.current = { type: 'move', sx: e.clientX, sy: e.clientY, ox: x, oy: y };
+    const cur = localRef.current;
+    modeRef.current = { type: 'move', sx: e.clientX, sy: e.clientY, ox: cur.x, oy: cur.y };
   }
 
   function startResize(corner: 'NW' | 'NE' | 'SW' | 'SE') {
     return (e: React.PointerEvent) => {
       e.stopPropagation();
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
-      modeRef.current = { type: 'resize', corner, sx: e.clientX, sy: e.clientY, snap: { ...calibration } };
+      modeRef.current = { type: 'resize', corner, sx: e.clientX, sy: e.clientY, snap: { ...localRef.current } };
     };
   }
 
-  // Generate grid lines
+  const { x, y, cellW, cellH } = local;
+  const gW = cellW * 3;
+  const gH = cellH * 3;
+
   const lines: React.ReactNode[] = [];
   for (let i = 0; i <= 3; i++) {
-    lines.push(<line key={`v${i}`} x1={x + i * cellW} y1={y} x2={x + i * cellW} y2={y + gridH} />);
-    lines.push(<line key={`h${i}`} x1={x} y1={y + i * cellH} x2={x + gridW} y2={y + i * cellH} />);
+    lines.push(<line key={`v${i}`} x1={x + i * cellW} y1={y} x2={x + i * cellW} y2={y + gH} />);
+    lines.push(<line key={`h${i}`} x1={x} y1={y + i * cellH} x2={x + gW} y2={y + i * cellH} />);
   }
 
   const corners: { id: 'NW' | 'NE' | 'SW' | 'SE'; cx: number; cy: number }[] = [
-    { id: 'NW', cx: x, cy: y },
-    { id: 'NE', cx: x + gridW, cy: y },
-    { id: 'SW', cx: x, cy: y + gridH },
-    { id: 'SE', cx: x + gridW, cy: y + gridH },
+    { id: 'NW', cx: x,      cy: y },
+    { id: 'NE', cx: x + gW, cy: y },
+    { id: 'SW', cx: x,      cy: y + gH },
+    { id: 'SE', cx: x + gW, cy: y + gH },
   ];
 
   return (
     <svg
-      style={{ position: 'absolute', top: 0, left: 0, width: containerW, height: containerH, overflow: 'visible', cursor: 'default' }}
+      style={{
+        position: 'absolute', top: 0, left: 0,
+        width: containerW, height: containerH,
+        overflow: 'visible', cursor: 'default',
+        touchAction: 'none', // prevent browser zoom/scroll from interfering
+        userSelect: 'none',
+      }}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
-      {/* grid lines */}
-      <g stroke="#00e5ff" strokeWidth="1.5" opacity="0.9">
-        {lines}
-      </g>
-      {/* semi-transparent fill */}
-      <rect x={x} y={y} width={gridW} height={gridH} fill="#00e5ff" fillOpacity="0.08" />
-      {/* drag handle (invisible overlay on grid interior) */}
+      <g stroke="#4FC3F7" strokeWidth="1.5" opacity="0.9">{lines}</g>
+      <rect x={x} y={y} width={gW} height={gH} fill="#4FC3F7" fillOpacity="0.08" />
+      {/* move handle */}
       <rect
-        x={x + HANDLE_R}
-        y={y + HANDLE_R}
-        width={gridW - HANDLE_R * 2}
-        height={gridH - HANDLE_R * 2}
-        fill="transparent"
-        cursor="move"
+        x={x + HANDLE_R} y={y + HANDLE_R}
+        width={gW - HANDLE_R * 2} height={gH - HANDLE_R * 2}
+        fill="transparent" cursor="move"
         onPointerDown={startMove}
       />
-      {/* corner resize handles */}
+      {/* resize handles */}
       {corners.map(({ id, cx, cy }) => (
         <circle
-          key={id}
-          cx={cx}
-          cy={cy}
-          r={HANDLE_R}
-          fill="#00e5ff"
-          stroke="#fff"
-          strokeWidth="1.5"
+          key={id} cx={cx} cy={cy} r={HANDLE_R}
+          fill="#4FC3F7" stroke="#0E1117" strokeWidth="2"
           cursor={id === 'NW' || id === 'SE' ? 'nwse-resize' : 'nesw-resize'}
           onPointerDown={startResize(id)}
         />
       ))}
-      {/* label */}
-      <text x={x + 4} y={y - 6} fill="#00e5ff" fontSize="11" fontFamily="sans-serif">
+      <text x={x + 4} y={y - 8} fill="#4FC3F7" fontSize="11" fontFamily="Roboto, sans-serif">
         {`${Math.round(cellW)}×${Math.round(cellH)} px/格`}
       </text>
     </svg>
